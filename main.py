@@ -1,53 +1,74 @@
-import json
 import os
-import codecs
+import json
+from sys import argv
 from instagram_private_api import Client, ClientCookieExpiredError, \
     ClientLoginRequiredError
+from src.util import from_json, create_session_file, list_dif, CREDENTIAL_FILE_NAME
 
 
-CREDENTIAL_FILE_NAME = '.session'
-
-
-def to_json(python_object):
-    if isinstance(python_object, bytes):
-        return {
-            '__class__': 'bytes',
-            '__value__': codecs.encode(python_object, 'base64').decode()
-        }
-    raise TypeError(repr(python_object) + ' is not JSON serializable')
-
-
-def from_json(json_object):
-    if '__class__' in json_object and json_object['__class__'] == 'bytes':
-        return codecs.decode(json_object['__value__'].encode(), 'base64')
-    return json_object
-
-
-def create_session_file(data: dict):
-    try:
-        with open(CREDENTIAL_FILE_NAME, "w") as file:
-            file.write(json.dumps(data, indent=4, default=to_json))
-    except Exception as e:
-        exit(f'Fail to create session file!\n {e}')
-
-
-def login_instagram(username: str, password: str):
+def login_instagram(login_username: str, login_password: str):
     try:
         if os.path.isfile(CREDENTIAL_FILE_NAME):
-            print('Reusing Credentials')
+            print('LOGIN: Reusing Credentials')
             device_id = None
-            with open(CREDENTIAL_FILE_NAME) as file:
+            with open(CREDENTIAL_FILE_NAME, encoding='UTF-8') as file:
                 cached_settings = json.load(file, object_hook=from_json)
                 device_id = cached_settings.get('device_id')
 
-            api = Client(username, password, settings=cached_settings)
+            api = Client(login_username, login_password,
+                         settings=cached_settings)
         else:
-            print('Creating Credentials')
-            api = Client(username, password)
+            print('LOGIN: Creating Credentials')
+            api = Client(login_username, login_password)
             create_session_file(api.settings)
     except (ClientCookieExpiredError, ClientLoginRequiredError):
-        print('Login Error, trying new credential')
-        api = Client(username, password, device_id=device_id)
+        print('LOGIN: Trying new credential')
+        api = Client(login_username, login_password, device_id=device_id)
 
     return api
-    
+
+
+def get_followers(api: Client):
+    user_id = api.authenticated_user_id
+    uuid = api.generate_uuid()
+    results = api.user_followers(user_id, uuid)
+    followers = []
+    followers.extend(results.get('users', []))
+    next_max_id = results.get('next_max_id')
+
+    while next_max_id:
+        results = api.user_followers(user_id, uuid, max_id=next_max_id)
+        followers.extend(results.get('users', []))
+        next_max_id = results.get('next_max_id')
+
+    return [user["username"] for user in followers]
+
+
+def get_following(api: Client):
+    user_id = api.authenticated_user_id
+    uuid = api.generate_uuid()
+    results = api.user_following(user_id, uuid)
+    following = []
+    following.extend(results.get('users', []))
+    next_max_id = results.get('next_max_id')
+
+    while next_max_id:
+        results = api.user_following(user_id, uuid, max_id=next_max_id)
+        following.extend(results.get('users', []))
+        next_max_id = results.get('next_max_id')
+
+    return [user["username"] for user in following]
+
+
+if __name__ == '__main__':
+    user, password = argv[1:]
+    api = login_instagram(user, password)
+    unfollow = list_dif(get_following(api), get_followers(api))
+
+    print(f'Currently {len(unfollow)} people are not following you back!. \n')
+    for username in unfollow:
+        decision = input(
+            f'Would you like to stop following @{username} ? (y/n) \n')
+        if decision == 'y':
+            user_id = api.username_info(username).get('user').get('pk')
+            api.friendships_destroy(user_id)
