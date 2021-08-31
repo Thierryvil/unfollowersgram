@@ -3,7 +3,7 @@
 
 Python app to find people who don’t follow you back on Instagram
 
-## USE AT YOUR OWN RISK
+:warning: USE AT YOUR OWN RISK :warning:
 
 ## Installation
 
@@ -24,3 +24,6 @@ Install project with git clone
 ```bash
 python main.py INSTAGRAM_USERNAME INSTAGRAM_PASSWORD
 ```
+
+## Screenshots
+![](https://i.imgur.com/WcDcWmj.jpeg)
