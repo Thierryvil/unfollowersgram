@@ -14,6 +14,8 @@ Install project with git clone
 
 
   cd unfollowersgram 
+  virtualenv .venv or python -m venv .venv
+  source .venv/bin/activate
   pip install -r requirements.txt
 ```
 
